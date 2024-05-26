@@ -26,7 +26,10 @@ def progress_function(stream, chunk, bytes_remaining):
     print(f'Download progress: {percentage:.2f}%')
 
 def compress_video(input_path, output_path, compression_rate):
-    # Convert compression rate from percentage to crf value
+    if compression_rate == 0:
+        print("Skipping compression as compression rate is 0%")
+        return input_path
+    
     crf_value = int((100 - compression_rate) * 51 / 100)
     command = [
         'ffmpeg',
@@ -59,17 +62,16 @@ def compress_video(input_path, output_path, compression_rate):
 
     process.wait()
     print(f"Video compressed successfully and saved to '{output_path}' with compression rate {compression_rate}% (CRF={crf_value})")
+    return output_path
 
 def get_seconds(time_str):
     h, m, s = map(float, time_str.split(':'))
     return int(h * 3600 + m * 60 + s)
 
 def download_youtube_video(url, output_path='output', download_audio=False, compression_rate=0):
-    # Create the output directory if it doesn't exist
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    # Disable SSL certificate verification
     ssl._create_default_https_context = ssl._create_unverified_context
 
     try:
@@ -82,24 +84,23 @@ def download_youtube_video(url, output_path='output', download_audio=False, comp
             base, ext = os.path.splitext(audio_file_path)
             mp3_file_path = base + '.mp3'
             
-            # Set ffmpeg path for pydub
             AudioSegment.converter = which("ffmpeg")
             AudioSegment.ffprobe = which("ffprobe")
 
-            # Convert to mp3
             AudioSegment.from_file(audio_file_path).export(mp3_file_path, format='mp3')
-            os.remove(audio_file_path)  # Remove the original audio file
+            os.remove(audio_file_path)
             print(f"Audio '{yt.title}' has been downloaded and converted to mp3 successfully to '{mp3_file_path}'!")
         else:
             stream = yt.streams.get_highest_resolution()
             video_file_path = stream.download(output_path=output_path)
-            base, ext = os.path.splitext(video_file_path)
-            compressed_video_path = base + '_compressed.mp4'
-            
-            # Compress video
-            compress_video(video_file_path, compressed_video_path, compression_rate)
-            os.remove(video_file_path)  # Remove the original video file
-            print(f"Video '{yt.title}' has been downloaded and compressed successfully to '{compressed_video_path}'!")
+            if compression_rate > 0:
+                base, ext = os.path.splitext(video_file_path)
+                compressed_video_path = base + '_compressed.mp4'
+                compressed_video_path = compress_video(video_file_path, compressed_video_path, compression_rate)
+                os.remove(video_file_path)
+                print(f"Video '{yt.title}' has been downloaded and compressed successfully to '{compressed_video_path}'!")
+            else:
+                print(f"Video '{yt.title}' has been downloaded successfully to '{video_file_path}'!")
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     if not download_audio:
         compression_rate = input("Enter the compression rate as a percentage (0-100, default is 0 for no compression): ").strip()
         compression_rate = int(compression_rate) if compression_rate.isdigit() else 0
-        compression_rate = max(0, min(100, compression_rate))  # Ensure the rate is between 0 and 100
+        compression_rate = max(0, min(100, compression_rate))
 
     config['output_path'] = output_path
     save_config(config)
